@@ -120,7 +120,7 @@ func (v *V2Core) AddUsers(p *AddUsersParams) (added int, err error) {
 		users = buildVmessUsers(p.Tag, p.Users)
 	case "vless":
 		flow := p.Common.Flow
-		// Try to fix flow if it's missing in common but exists in network settings
+		// 如果 common.flow 为空，尝试从 NetworkSettings JSON 中提取
 		if flow == "" && len(p.Common.NetworkSettings) > 0 {
 			var netSettings map[string]interface{}
 			if err := json.Unmarshal(p.Common.NetworkSettings, &netSettings); err == nil {
@@ -131,7 +131,7 @@ func (v *V2Core) AddUsers(p *AddUsersParams) (added int, err error) {
 			}
 		}
 
-		// Final check to prevent XTLS-Vision issues
+		// 最终检查：如果流控依然为空，输出警告日志
 		if flow == "" {
 			log.WithField("node", p.Tag).Warn("VLESS flow is empty, connection might be rejected by vision sniffer")
 		}
@@ -200,15 +200,14 @@ func buildVlessUsers(tag string, userInfo []panel.UserInfo, flow string) (users 
 	return users
 }
 
-func buildVlessUser(tag string, userInfo *panel.UserInfo, flow string) (user *protocol.User) {
-	vlessAccount := &vless.Account{
-		Id: userInfo.Uuid,
-	}
-	vlessAccount.Flow = flow
+func buildVlessUser(tag string, userInfo *panel.UserInfo, flow string) *protocol.User {
 	return &protocol.User{
-		Level:   0,
-		Email:   format.UserTag(tag, userInfo.Uuid),
-		Account: serial.ToTypedMessage(vlessAccount),
+		Level: 0,
+		Email: format.UserTag(tag, userInfo.Uuid),
+		Account: serial.ToTypedMessage(&vless.Account{
+			Id:   userInfo.Uuid,
+			Flow: flow, // 在初始化结构体时直接注入 Flow，确保序列化成功
+		}),
 	}
 }
 
