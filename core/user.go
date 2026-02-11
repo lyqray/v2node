@@ -3,10 +3,12 @@ package core
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	panel "github.com/wyx2685/v2node/api/v2board"
 	"github.com/wyx2685/v2node/common/counter"
 	"github.com/wyx2685/v2node/common/format"
@@ -117,7 +119,24 @@ func (v *V2Core) AddUsers(p *AddUsersParams) (added int, err error) {
 	case "vmess":
 		users = buildVmessUsers(p.Tag, p.Users)
 	case "vless":
-		users = buildVlessUsers(p.Tag, p.Users, p.Common.Flow)
+		flow := p.Common.Flow
+		// Try to fix flow if it's missing in common but exists in network settings
+		if flow == "" && len(p.Common.NetworkSettings) > 0 {
+			var netSettings map[string]interface{}
+			if err := json.Unmarshal(p.Common.NetworkSettings, &netSettings); err == nil {
+				if f, ok := netSettings["flow"].(string); ok && f != "" {
+					flow = f
+					log.WithField("flow", flow).Info("VLESS flow fixed from network settings")
+				}
+			}
+		}
+
+		// Final check to prevent XTLS-Vision issues
+		if flow == "" {
+			log.WithField("node", p.Tag).Warn("VLESS flow is empty, connection might be rejected by vision sniffer")
+		}
+
+		users = buildVlessUsers(p.Tag, p.Users, flow)
 	case "trojan":
 		users = buildTrojanUsers(p.Tag, p.Users)
 	case "shadowsocks":
